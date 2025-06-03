@@ -14,30 +14,39 @@
   <p id="recordingStatus"></p>
 
   <h3>🔊 Bot Response</h3>
-  <p id="botText"></p>
+  <p id="botText">(waiting...)</p>
   <audio id="audioPlayer" controls></audio>
 
   <script>
     const backendUrl = "https://voice-bot-backend-jxse.onrender.com";
 
     async function sendText() {
-      const input = document.getElementById("textInput").value;
+      const input = document.getElementById("textInput").value || "Hello! Can you help me practice English?";
       const formData = new FormData();
       formData.append("prompt", input);
 
-      const chatRes = await fetch(`${backendUrl}/chat`, { method: "POST", body: formData });
-      const chatJson = await chatRes.json();
+      try {
+        const chatRes = await fetch(`${backendUrl}/chat`, { method: "POST", body: formData });
+        const chatJson = await chatRes.json();
 
-      document.getElementById("botText").innerText = chatJson.response;
+        document.getElementById("botText").innerText = chatJson.response || "(Empty response from GPT)";
 
-      const speakForm = new FormData();
-      speakForm.append("text", chatJson.response);
+        const speakForm = new FormData();
+        speakForm.append("text", chatJson.response);
 
-      const audioRes = await fetch(`${backendUrl}/speak`, { method: "POST", body: speakForm });
-      const audioBlob = await audioRes.blob();
+        const audioRes = await fetch(`${backendUrl}/speak`, { method: "POST", body: speakForm });
 
-      const audioUrl = URL.createObjectURL(audioBlob);
-      document.getElementById("audioPlayer").src = audioUrl;
+        if (!audioRes.ok) {
+          document.getElementById("botText").innerText += `\n❌ Audio error: ${audioRes.status}`;
+          return;
+        }
+
+        const audioBlob = await audioRes.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        document.getElementById("audioPlayer").src = audioUrl;
+      } catch (err) {
+        document.getElementById("botText").innerText = "❌ Error: " + err.message;
+      }
     }
 
     // 🎤 Audio recording
@@ -67,15 +76,19 @@
         const formData = new FormData();
         formData.append("file", audioBlob, "voice.mp3");
 
-        const transRes = await fetch(`${backendUrl}/transcribe`, { method: "POST", body: formData });
-        const transJson = await transRes.json();
-        document.getElementById("textInput").value = transJson.text;
-        sendText();
+        try {
+          const transRes = await fetch(`${backendUrl}/transcribe`, { method: "POST", body: formData });
+          const transJson = await transRes.json();
+          document.getElementById("textInput").value = transJson.text || "(Could not transcribe)";
+          sendText();
+        } catch (err) {
+          document.getElementById("botText").innerText = "❌ Transcription error: " + err.message;
+        }
       };
 
       mediaRecorder.start();
       recordButton.innerText = "Stop Recording";
-      status.innerText = "🎙️ Recording...";
+      status.innerText = "🎧 Recording...";
     };
   </script>
 </body>
