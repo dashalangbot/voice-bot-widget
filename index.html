@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Voice Bot</title>
+</head>
+<body>
+  <h2>💬 Ask me a question</h2>
+  <input type="text" id="textInput" placeholder="Type your question here..." style="width:300px;">
+  <button onclick="sendText()">Send Text</button>
+
+  <h3>🎤 Or record your voice</h3>
+  <button id="recordButton">Start Recording</button>
+  <p id="recordingStatus"></p>
+
+  <h3>🔊 Bot Response</h3>
+  <p id="botText"></p>
+  <audio id="audioPlayer" controls></audio>
+
+  <script>
+    const backendUrl = "https://voice-bot-backend-jxse.onrender.com";
+
+    async function sendText() {
+      const input = document.getElementById("textInput").value;
+      const formData = new FormData();
+      formData.append("prompt", input);
+
+      const chatRes = await fetch(`${backendUrl}/chat`, { method: "POST", body: formData });
+      const chatJson = await chatRes.json();
+
+      document.getElementById("botText").innerText = chatJson.response;
+
+      const speakForm = new FormData();
+      speakForm.append("text", chatJson.response);
+
+      const audioRes = await fetch(`${backendUrl}/speak`, { method: "POST", body: speakForm });
+      const audioBlob = await audioRes.blob();
+
+      const audioUrl = URL.createObjectURL(audioBlob);
+      document.getElementById("audioPlayer").src = audioUrl;
+    }
+
+    // 🎤 Audio recording
+    let mediaRecorder;
+    let audioChunks = [];
+    const recordButton = document.getElementById("recordButton");
+    const status = document.getElementById("recordingStatus");
+
+    recordButton.onclick = async () => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+        recordButton.innerText = "Start Recording";
+        status.innerText = "Recording stopped";
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+
+      audioChunks = [];
+      mediaRecorder.ondataavailable = event => {
+        if (event.data.size > 0) audioChunks.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: "audio/mpeg" });
+        const formData = new FormData();
+        formData.append("file", audioBlob, "voice.mp3");
+
+        const transRes = await fetch(`${backendUrl}/transcribe`, { method: "POST", body: formData });
+        const transJson = await transRes.json();
+        document.getElementById("textInput").value = transJson.text;
+        sendText();
+      };
+
+      mediaRecorder.start();
+      recordButton.innerText = "Stop Recording";
+      status.innerText = "🎙️ Recording...";
+    };
+  </script>
+</body>
+</html>
